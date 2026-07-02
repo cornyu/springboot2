@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据浏览器 - 管理配置</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<div id="app">
+    <!-- 顶部导航 -->
+    <el-header class="admin-header">
+        <h1 class="header-title">数据浏览器 - 管理配置</h1>
+        <div>
+            <el-button size="small" plain @click="goToBrowser" icon="el-icon-s-data">返回数据浏览器</el-button>
+        </div>
+    </el-header>
+
+    <div class="admin-container">
+        <!-- 左侧：树管理 -->
+        <div class="tree-panel">
+            <div class="panel-toolbar">
+                <span class="panel-title">树结构管理</span>
+                <div>
+                    <el-button size="mini" type="primary" @click="showAddGroupDialog" icon="el-icon-folder-add">新建分组</el-button>
+                    <el-button size="mini" type="success" @click="showAddTableDialog" icon="el-icon-plus">添加表</el-button>
+                </div>
+            </div>
+            <div class="tree-wrapper">
+                <el-tree
+                    ref="tree"
+                    :data="treeData"
+                    :props="treeProps"
+                    node-key="id"
+                    highlight-current
+                    draggable
+                    @node-click="onNodeClick"
+                    @node-drop="onNodeDrop"
+                    :expand-on-click-node="true">
+                    <span class="custom-tree-node" slot-scope="{ data, node }">
+                        <span v-if="editingNodeId === data.id" class="node-edit">
+                            <el-input size="mini" v-model="editLabel" ref="editInput"
+                                @blur="saveEdit(data)" @keyup.enter.native="saveEdit(data)" style="width:140px"></el-input>
+                            <el-button size="mini" type="text" @click="saveEdit(data)">✓</el-button>
+                            <el-button size="mini" type="text" @click="editingNodeId = null">✕</el-button>
+                        </span>
+                        <span v-else class="node-display" @dblclick="startEdit(data)">
+                            <i :class="data.nodeType === 'GROUP' ? 'el-icon-folder' : 'el-icon-s-data'"></i>
+                            <span class="node-label">{{ data.label }}</span>
+                            <span class="tree-meta" v-if="data.tableName">[{{ data.tableName }}]</span>
+                            <el-tag size="mini" type="danger" v-if="!data.exposed">隐藏</el-tag>
+                            <span class="tree-actions" @click.stop>
+                                <el-button size="mini" type="text" @click="startEdit(data)" title="重命名">✏️</el-button>
+                                <el-button size="mini" type="text" @click="toggleExposed(data)" title="切换显隐">
+                                    {{ data.exposed ? '👁️' : '🚫' }}
+                                </el-button>
+                                <el-button size="mini" type="text" @click="confirmDelete(data, node)" title="删除">🗑️</el-button>
+                            </span>
+                        </span>
+                    </span>
+                </el-tree>
+            </div>
+            <div v-if="treeData.length === 0" class="empty-hint">
+                <p>树为空，请添加分组或数据表</p>
+            </div>
+        </div>
+
+        <!-- 右侧：列配置 -->
+        <div class="config-panel" v-if="selectedNode && selectedNode.nodeType === 'TABLE'">
+            <div class="panel-toolbar">
+                <span class="panel-title">字段配置 - {{ selectedNode.label }}</span>
+                <div>
+                    <el-button size="mini" type="text" @click="selectAllColumns">全选</el-button>
+                    <el-button size="mini" type="text" @click="deselectAllColumns">清空</el-button>
+                </div>
+            </div>
+            <div class="column-list" v-loading="columnLoading">
+                <div v-for="col in columnConfigs" :key="col.columnName" class="column-item" :class="{ 'column-hidden': !col.exposed }">
+                    <el-switch v-model="col.exposed" @change="saveColumnConfig" active-color="#409EFF" inactive-color="#C0C4CC"></el-switch>
+                    <span class="column-name">{{ col.columnName }}</span>
+                </div>
+            </div>
+            <div v-if="columnConfigs.length === 0" class="empty-hint">
+                <p>暂无字段配置，请先保存节点</p>
+            </div>
+        </div>
+        <div class="config-panel empty-panel" v-else-if="!selectedNode">
+            <div class="empty-hint">
+                <i class="el-icon-document"></i>
+                <p>选择左侧一个表节点配置字段可见性</p>
+            </div>
+        </div>
+        <div class="config-panel empty-panel" v-else>
+            <div class="empty-hint">
+                <i class="el-icon-folder-opened"></i>
+                <p>分组节点无需字段配置</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建分组对话框 -->
+    <el-dialog title="新建分组" :visible.sync="addGroupVisible" width="420px">
+        <el-form :model="addGroupForm" label-width="90px">
+            <el-form-item label="分组名称" required>
+                <el-input v-model="addGroupForm.label" placeholder="例如: 业务数据" autofocus></el-input>
+            </el-form-item>
+            <el-form-item label="父级分组">
+                <el-select v-model="addGroupForm.parentId" placeholder="留空为根节点" clearable style="width:100%">
+                    <el-option v-for="g in groupOptions" :key="g.id" :label="g.label" :value="g.id"></el-option>
+                </el-select>
+            </el-form-item>
+        </el-form>
+        <span slot="footer">
+            <el-button @click="addGroupVisible = false">取消</el-button>
+            <el-button type="primary" @click="addGroup">确定</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 添加表对话框 -->
+    <el-dialog title="添加数据表" :visible.sync="addTableVisible" width="500px">
+        <el-form :model="addTableForm" label-width="90px">
+            <el-form-item label="显示名称" required>
+                <el-input v-model="addTableForm.label" placeholder="例如: 学生信息"></el-input>
+            </el-form-item>
+            <el-form-item label="数据库表" required>
+                <el-select v-model="addTableForm.tableName" placeholder="选择数据库表" style="width:100%">
+                    <el-option v-for="t in dbTables" :key="t.name" :label="t.name + (t.comment ? ' (' + t.comment + ')' : '')" :value="t.name"></el-option>
+                </el-select>
+            </el-form-item>
+            <el-form-item label="归属分组">
+                <el-select v-model="addTableForm.parentId" placeholder="留空为根节点" clearable style="width:100%">
+                    <el-option v-for="g in groupOptions" :key="g.id" :label="g.label" :value="g.id"></el-option>
+                </el-select>
+            </el-form-item>
+        </el-form>
+        <span slot="footer">
+            <el-button @click="addTableVisible = false">取消</el-button>
+            <el-button type="primary" @click="addTable">确定</el-button>
+        </span>
+    </el-dialog>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.7.2/dist/axios.min.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

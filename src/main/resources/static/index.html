@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据库数据浏览器</title>
+    <!-- Element UI 样式 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+    <!-- 顶部导航 -->
+    <el-header class="app-header">
+        <h1 class="header-title">数据库数据浏览器</h1>
+        <div class="header-info">
+            <el-button size="small" plain @click="goToAdmin" icon="el-icon-setting" style="color:#fff;border-color:rgba(255,255,255,0.5)">管理配置</el-button>
+        </div>
+    </el-header>
+
+    <div class="app-container">
+        <!-- 左侧：树形菜单 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">数据目录</span>
+                <el-button size="mini" icon="el-icon-refresh" circle @click="loadTree" :loading="loading"></el-button>
+            </div>
+            <el-tree
+                :data="treeData"
+                :props="treeProps"
+                node-key="id"
+                highlight-current
+                :filter-node-method="filterNode"
+                @node-click="onTableClick"
+                :expand-on-click-node="true">
+                <span class="custom-tree-node" slot-scope="{ data }">
+                    <i :class="data.nodeType === 'GROUP' ? 'el-icon-folder' : 'el-icon-s-data'"></i>
+                    <span>{{ data.label }}</span>
+                    <span class="tree-node-comment" v-if="data.nodeType === 'TABLE' && data.tableName !== data.label">[{{ data.tableName }}]</span>
+                </span>
+            </el-tree>
+        </div>
+
+        <!-- 右侧：查询面板 -->
+        <div class="main-panel" v-if="selectedTable">
+            <!-- 当前表名 -->
+            <div class="current-table-bar">
+                <i class="el-icon-s-data"></i> {{ selectedTableLabel }}
+                <span class="table-name-hint">({{ selectedTable }})</span>
+            </div>
+
+            <!-- 字段选择 -->
+            <el-card class="panel-card" shadow="never">
+                <div slot="header" class="panel-header">
+                    <span>字段选择</span>
+                    <div>
+                        <el-button type="text" size="mini" @click="selectAllFields">全选</el-button>
+                        <el-button type="text" size="mini" @click="selectedColumns = []">清空</el-button>
+                    </div>
+                </div>
+                <el-checkbox-group v-model="selectedColumns">
+                    <el-checkbox v-for="col in columns" :key="col.name" :label="col.name" class="field-checkbox">
+                        {{ col.name }}
+                        <span class="field-type">{{ col.type }}</span>
+                        <span class="field-comment" v-if="col.comment">({{ col.comment }})</span>
+                    </el-checkbox>
+                </el-checkbox-group>
+            </el-card>
+
+            <!-- 条件输入 -->
+            <el-card class="panel-card" shadow="never">
+                <div slot="header" class="panel-header">
+                    <span>筛选条件</span>
+                    <el-button type="text" size="mini" @click="addCondition">+ 添加条件</el-button>
+                </div>
+                <div v-for="(cond, index) in whereConditions" :key="index" class="condition-row">
+                    <el-select v-model="cond.field" placeholder="选择字段" size="small" class="cond-field">
+                        <el-option v-for="col in columns" :key="col.name" :label="col.name" :value="col.name"></el-option>
+                    </el-select>
+                    <el-select v-model="cond.operator" size="small" class="cond-operator">
+                        <el-option label="=" value="="></el-option>
+                        <el-option label="!=" value="!="></el-option>
+                        <el-option label=">" value=">"></el-option>
+                        <el-option label=">=" value=">="></el-option>
+                        <el-option label="<" value="<"></el-option>
+                        <el-option label="<=" value="<="></el-option>
+                        <el-option label="LIKE" value="LIKE"></el-option>
+                        <el-option label="IN" value="IN"></el-option>
+                    </el-select>
+                    <el-input v-model="cond.value" placeholder="值" size="small" class="cond-value"
+                              :title="cond.operator === 'IN' ? '多个值用逗号分隔' : ''"></el-input>
+                    <el-button type="danger" icon="el-icon-delete" size="small" circle
+                               @click="removeCondition(index)"
+                               :disabled="whereConditions.length === 1"></el-button>
+                </div>
+            </el-card>
+
+            <!-- 排序 -->
+            <el-card class="panel-card" shadow="never">
+                <div slot="header" class="panel-header">
+                    <span>排序</span>
+                </div>
+                <div class="sort-row">
+                    <el-select v-model="orderBy" placeholder="排序字段" size="small" class="cond-field" clearable>
+                        <el-option v-for="col in columns" :key="col.name" :label="col.name" :value="col.name"></el-option>
+                    </el-select>
+                    <el-select v-model="order" size="small" class="cond-operator" :disabled="!orderBy">
+                        <el-option label="升序 ASC" value="ASC"></el-option>
+                        <el-option label="降序 DESC" value="DESC"></el-option>
+                    </el-select>
+                </div>
+            </el-card>
+
+            <!-- 操作按钮 -->
+            <div class="action-bar">
+                <el-button type="primary" @click="executeQuery" :loading="queryLoading" icon="el-icon-search">查询</el-button>
+                <el-button @click="resetQuery" icon="el-icon-refresh">重置</el-button>
+                <el-button @click="exportCsv" :disabled="resultRows.length === 0" icon="el-icon-download">导出CSV</el-button>
+                <el-button @click="showGenerateDialog" :disabled="resultRows.length === 0" icon="el-icon-document">生成调用接口</el-button>
+            </div>
+
+            <!-- 结果表格 -->
+            <el-card class="panel-card" shadow="never">
+                <div slot="header" class="panel-header">
+                    <span>查询结果</span>
+                    <span v-if="queryTime > 0" class="result-info">
+                        共 {{ total }} 条，耗时 {{ queryTime }}ms
+                    </span>
+                </div>
+                <el-table
+                    :data="resultRows"
+                    border
+                    stripe
+                    highlight-current-row
+                    max-height="500"
+                    v-loading="queryLoading"
+                    style="width: 100%">
+                    <el-table-column type="index" label="#" width="50" fixed="left"></el-table-column>
+                    <el-table-column
+                        v-for="col in resultColumns"
+                        :key="col"
+                        :prop="col"
+                        :label="col"
+                        min-width="120"
+                        show-overflow-tooltip>
+                    </el-table-column>
+                </el-table>
+                <div class="pagination-wrapper" v-if="total > 0">
+                    <el-pagination
+                        @size-change="onPageSizeChange"
+                        @current-change="onPageChange"
+                        :current-page="currentPage"
+                        :page-sizes="[50, 100, 200, 500]"
+                        :page-size="pageSize"
+                        layout="total, sizes, prev, pager, next, jumper"
+                        :total="total">
+                    </el-pagination>
+                </div>
+            </el-card>
+        </div>
+
+        <!-- 未选择表时的提示 -->
+        <div class="main-panel empty-panel" v-else>
+            <div class="empty-hint">
+                <i class="el-icon-s-data"></i>
+                <p>请从左侧选择一张数据表开始查询</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 生成接口信息对话框 -->
+    <el-dialog title="生成 RESTful 接口信息" :visible.sync="dialogVisible" width="600px" :top="'10vh'">
+        <div class="api-info">
+            <div class="api-section">
+                <h4>接口地址</h4>
+                <el-input :value="apiEndpoint" readonly>
+                    <template slot="prepend">POST</template>
+                </el-input>
+            </div>
+            <div class="api-section">
+                <h4>请求参数 (JSON)</h4>
+                <pre class="code-block">{{ apiRequestBody }}</pre>
+            </div>
+            <div class="api-section">
+                <h4>cURL 示例</h4>
+                <pre class="code-block">{{ apiCurl }}</pre>
+            </div>
+            <div class="api-section">
+                <h4>响应示例</h4>
+                <pre class="code-block">{{ apiResponseBody }}</pre>
+            </div>
+        </div>
+        <span slot="footer">
+            <el-button @click="dialogVisible = false">关闭</el-button>
+            <el-button type="primary" @click="copyApiInfo">复制接口信息</el-button>
+        </span>
+    </el-dialog>
+</div>
+
+<!-- Vue 2 -->
+<script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+<!-- Element UI -->
+<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
+<!-- Axios -->
+<script src="https://cdn.jsdelivr.net/npm/axios@1.7.2/dist/axios.min.js"></script>
+<!-- 自定义 JS -->
+<script src="js/app.js"></script>
+</body>
+</html>

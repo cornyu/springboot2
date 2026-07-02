@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn compile *)"
+      "Bash(mvn compile *)",
+      "WebFetch(domain:tushare.pro)",
+      "WebSearch",
+      "Bash(mvn spring-boot:run -q)",
+      "Bash(timeout 45 mvn spring-boot:run)",
+      "Bash(curl *)",
+      "Bash(mvn spring-boot:run)",
+      "Bash(python -m json.tool)"
     ]
   }
 }

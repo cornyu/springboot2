@@ -30,7 +30,7 @@
 2. **服务层** (`com.springboot.demo.service`):
    - 接口 (`StudentService`) 和实现 (`StudentServiceImpl`)
    - 使用 `@Service` 注解，写操作使用 `@Transactional` 注解
-   - 控制器和映射器之间的业务逻辑层
+   - 控制器和映射器之间的业务逻辑
 
 3. **数据访问层** (`com.springboot.demo.mapper`):
    - MyBatis 映射器接口，使用基于注解的 SQL（`@Select`、`@Insert` 等）
