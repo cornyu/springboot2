@@ -3,6 +3,17 @@
 var API_BASE = window.location.origin;
 axios.defaults.baseURL = API_BASE;
 
+// 清理旧版遗留的网页端 apikey（新版本网页端使用登录会话，不再读取该值）
+localStorage.removeItem('apiKey');
+
+// 会话过期(401)自动回登录页
+axios.interceptors.response.use(function (res) { return res; }, function (err) {
+    if (err.response && err.response.status === 401) {
+        window.location.href = 'login.html';
+    }
+    return Promise.reject(err);
+});
+
 new Vue({
     el: '#app',
     data: {
@@ -23,7 +34,8 @@ new Vue({
         currentPage: 1,
         pageSize: 100,
         dialogVisible: false,
-        treeProps: { children: 'children', label: 'label' }
+        treeProps: { children: 'children', label: 'label' },
+        apiKeyInput: ''   // 生成接口信息时用户填写的 apikey（外部程序调用用）
     },
     computed: {
         apiEndpoint: function () {
@@ -43,7 +55,11 @@ new Vue({
         },
         apiCurl: function () {
             var body = JSON.stringify(JSON.parse(this.apiRequestBody));
-            return 'curl -X POST \\\n  ' + this.apiEndpoint + ' \\\n  -H "Content-Type: application/json" \\\n  -d \'' + body + '\'';
+            var key = this.apiKeyInput || 'sk-你的apikey';
+            return 'curl -X POST \\\n  ' + this.apiEndpoint + ' \\\n'
+                + '  -H "Content-Type: application/json" \\\n'
+                + '  -H "Authorization: Bearer ' + key + '" \\\n'
+                + '  -d \'' + body + '\'';
         },
         apiResponseBody: function () {
             var sampleRows = this.resultRows.slice(0, 3);
@@ -205,7 +221,9 @@ new Vue({
             this.dialogVisible = true;
         },
         copyApiInfo: function () {
+            var key = this.apiKeyInput || 'sk-你的apikey';
             var text = '接口地址: POST ' + this.apiEndpoint + '\n\n'
+                + '鉴权(apikey): Authorization: Bearer ' + key + '\n\n'
                 + '请求参数:\n' + this.apiRequestBody + '\n\n'
                 + 'cURL:\n' + this.apiCurl + '\n\n'
                 + '响应示例:\n' + this.apiResponseBody;
@@ -218,14 +236,26 @@ new Vue({
             } else {
                 ELEMENT.Message.warning('复制失败，请手动复制');
             }
+        },
+        // 跳转到管理配置
+        goToAdmin: function () {
+            window.location.href = 'admin.html';
+        },
+        // 跳转到 apikey 管理
+        goToApikey: function () {
+            window.location.href = 'apikey.html';
+        },
+        // 退出登录
+        logout: function () {
+            axios.post('/logout').finally(function () {
+                window.location.href = 'login.html?logout=1';
+            });
+        },
+        // 树节点过滤
+        filterNode: function (value, data) {
+            if (!value) return true;
+            return data.label.indexOf(value) !== -1;
         }
-    },
-    goToAdmin: function () {
-        window.location.href = 'admin.html';
-    },
-    filterNode: function (value, data) {
-        if (!value) return true;
-        return data.label.indexOf(value) !== -1;
     },
     mounted: function () {
         this.loadTree();

@@ -1,6 +1,7 @@
 package com.springboot.demo.util;
 
 import com.springboot.demo.entity.Student;
+import com.springboot.demo.service.AppUserService;
 import com.springboot.demo.service.StudentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,8 +20,17 @@ public class DataInitializer implements CommandLineRunner {
     @Autowired
     private StudentService studentService;
 
+    @Autowired
+    private AppUserService appUserService;
+
     @Override
     public void run(String... args) throws Exception {
+        // 初始化默认管理员账号
+        if (appUserService.findByUsername("admin") == null) {
+            appUserService.createUser("admin", "123456");
+            logger.info("已创建默认管理员账号: admin / 123456");
+        }
+
         // 清空表（测试环境使用）
         // studentService.deleteById(1L); // 示例：删除ID为1的记录
 

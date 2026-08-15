@@ -1,5 +1,13 @@
 /* global Vue, axios, ELEMENT */
 
+// 会话过期(401)自动回登录页
+axios.interceptors.response.use(function (res) { return res; }, function (err) {
+    if (err.response && err.response.status === 401) {
+        window.location.href = 'login.html';
+    }
+    return Promise.reject(err);
+});
+
 new Vue({
     el: '#app',
     data: {
@@ -247,6 +255,12 @@ new Vue({
         // 跳转到数据浏览器
         goToBrowser: function () {
             window.location.href = 'index.html';
+        },
+        // 退出登录
+        logout: function () {
+            axios.post('/logout').finally(function () {
+                window.location.href = 'login.html?logout=1';
+            });
         }
     },
     mounted: function () {

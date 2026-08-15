@@ -7,7 +7,7 @@
     <!-- Element UI 样式 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
     <!-- 自定义样式 -->
-    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/app.css?v=20260815e">
 </head>
 <body>
 <div id="app">
@@ -15,7 +15,9 @@
     <el-header class="app-header">
         <h1 class="header-title">数据库数据浏览器</h1>
         <div class="header-info">
-            <el-button size="small" plain @click="goToAdmin" icon="el-icon-setting" style="color:#fff;border-color:rgba(255,255,255,0.5)">管理配置</el-button>
+            <el-button size="small" plain class="header-btn" @click="goToApikey" icon="el-icon-key">apikey</el-button>
+            <el-button size="small" plain class="header-btn" @click="goToAdmin" icon="el-icon-setting">管理配置</el-button>
+            <el-button size="small" plain class="header-btn" @click="logout" icon="el-icon-switch-button">退出登录</el-button>
         </div>
     </el-header>
 
@@ -25,6 +27,10 @@
             <div class="sidebar-header">
                 <span class="sidebar-title">数据目录</span>
                 <el-button size="mini" icon="el-icon-refresh" circle @click="loadTree" :loading="loading"></el-button>
+            </div>
+            <div class="sidebar-menu" @click="goToApikey" title="管理外部调用数据接口所需的 apikey">
+                <i class="el-icon-key"></i>
+                <span>apikey 管理</span>
             </div>
             <el-tree
                 :data="treeData"
@@ -179,6 +185,12 @@
                 </el-input>
             </div>
             <div class="api-section">
+                <h4>鉴权（apikey，外部调用必需）</h4>
+                <el-input v-model="apiKeyInput" placeholder="填入你的 apikey，留空则 cURL 使用占位符">
+                    <template slot="prepend">Bearer</template>
+                </el-input>
+            </div>
+            <div class="api-section">
                 <h4>请求参数 (JSON)</h4>
                 <pre class="code-block">{{ apiRequestBody }}</pre>
             </div>
@@ -205,6 +217,6 @@
 <!-- Axios -->
 <script src="https://cdn.jsdelivr.net/npm/axios@1.7.2/dist/axios.min.js"></script>
 <!-- 自定义 JS -->
-<script src="js/app.js"></script>
+<script src="js/app.js?v=20260815d"></script>
 </body>
 </html>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API密钥管理</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
+    <link rel="stylesheet" href="css/app.css?v=20260815e">
+    <style>
+        .apikey-container { padding: 20px; }
+        .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+        .panel-title { font-size: 16px; font-weight: 600; color: #303133; }
+        .usage-tip {
+            margin-top: 16px; background: #ecf5ff; border: 1px solid #d9ecff; border-radius: 4px;
+            padding: 12px 14px; font-size: 13px; color: #606266; line-height: 1.8;
+        }
+        .usage-tip code {
+            background: #fff; border: 1px solid #dcdfe6; border-radius: 3px;
+            padding: 1px 6px; font-size: 12px; color: #409eff;
+        }
+        .full-key-box {
+            background: #f5f7fa; border: 1px solid #e4e7ed; border-radius: 4px;
+            padding: 14px; font-family: monospace; font-size: 13px; word-break: break-all;
+            color: #303133; margin-bottom: 8px; user-select: all;
+        }
+        .masked-key { font-family: monospace; }
+        .status-active { color: #67c23a; }
+        .status-revoked { color: #909399; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <el-header class="app-header">
+        <h1 class="header-title">数据库数据浏览器 - API密钥管理</h1>
+        <div class="header-info">
+            <el-button size="small" plain class="header-btn" @click="goToBrowser" icon="el-icon-s-data">返回数据浏览器</el-button>
+            <el-button size="small" plain class="header-btn" @click="logout" icon="el-icon-switch-button">退出登录</el-button>
+        </div>
+    </el-header>
+
+    <div class="apikey-container">
+        <div class="toolbar">
+            <span class="panel-title">我的 API 密钥</span>
+            <el-button type="primary" size="small" @click="showCreateDialog" icon="el-icon-plus">创建密钥</el-button>
+        </div>
+
+        <el-card shadow="never">
+            <el-table :data="keys" border stripe style="width:100%">
+                <el-table-column prop="name" label="名称" min-width="120">
+                    <template slot-scope="{ row }">
+                        <span v-if="row.name">{{ row.name }}</span>
+                        <span v-else style="color:#c0c4cc">未命名</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="密钥" min-width="180">
+                    <template slot-scope="{ row }">
+                        <span class="masked-key">{{ row.keyPreview }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="状态" width="90">
+                    <template slot-scope="{ row }">
+                        <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
+                            {{ row.status === 1 ? '有效' : '已撤销' }}
+                        </el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="创建时间" width="170">
+                    <template slot-scope="{ row }">{{ formatDate(row.createdAt) }}</template>
+                </el-table-column>
+                <el-table-column label="最后使用" width="170">
+                    <template slot-scope="{ row }">
+                        <span :class="row.lastUsedAt ? '' : 'status-revoked'">{{ row.lastUsedAt ? formatDate(row.lastUsedAt) : '从未使用' }}</span>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作" width="90" align="center">
+                    <template slot-scope="{ row }">
+                        <el-button type="danger" size="mini" plain @click="revokeKey(row)"
+                                   :disabled="row.status !== 1">撤销</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </el-card>
+
+        <div class="usage-tip">
+            <b>apikey 用途：</b>供<b>外部程序</b>调用数据接口使用（网页端使用登录会话，无需 apikey）。<br>
+            调用方式：在请求头携带 <code>Authorization: Bearer &lt;你的sk-key&gt;</code> 访问
+            <code>GET /api/db/tree</code>、<code>POST /api/db/query</code> 等数据接口。<br>
+            cURL 示例：<code>curl -H "Authorization: Bearer sk-xxxx" http://localhost:8989/api/db/tree</code><br>
+            <span style="color:#909399">密钥仅在创建时完整显示一次，请妥善保存；服务端只存储其哈希值。</span>
+        </div>
+    </div>
+
+    <!-- 创建密钥对话框 -->
+    <el-dialog title="创建 API 密钥" :visible.sync="createVisible" width="440px">
+        <el-form label-width="80px">
+            <el-form-item label="名称">
+                <el-input v-model="createForm.name" placeholder="备注用途，可留空（如：测试环境）"></el-input>
+            </el-form-item>
+        </el-form>
+        <span slot="footer">
+            <el-button @click="createVisible = false">取消</el-button>
+            <el-button type="primary" @click="createKey" :loading="creating">创建</el-button>
+        </span>
+    </el-dialog>
+
+    <!-- 创建成功展示完整key（仅此一次） -->
+    <el-dialog title="密钥创建成功" :visible.sync="revealVisible" width="520px" :close-on-click-modal="false">
+        <p style="font-size:13px;color:#909399;margin-bottom:8px">请立即复制保存，关闭后将无法再次查看完整密钥。</p>
+        <div class="full-key-box">{{ newKey }}</div>
+        <span slot="footer">
+            <el-button @click="revealVisible = false" icon="el-icon-close">关闭</el-button>
+            <el-button @click="copyNewKey" type="primary" icon="el-icon-document-copy">复制密钥</el-button>
+        </span>
+    </el-dialog>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios@1.7.2/dist/axios.min.js"></script>
+<script src="js/apikey.js?v=20260815"></script>
+</body>
+</html>

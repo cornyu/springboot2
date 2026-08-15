@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>数据浏览器 - 管理配置</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/theme-chalk/index.css">
-    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/admin.css?v=20260815">
 </head>
 <body>
 <div id="app">
@@ -14,6 +14,7 @@
         <h1 class="header-title">数据浏览器 - 管理配置</h1>
         <div>
             <el-button size="small" plain @click="goToBrowser" icon="el-icon-s-data">返回数据浏览器</el-button>
+            <el-button size="small" plain @click="logout" icon="el-icon-switch-button" style="margin-left:8px">退出登录</el-button>
         </div>
     </el-header>
 
@@ -144,6 +145,6 @@
 <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.14/lib/index.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/axios@1.7.2/dist/axios.min.js"></script>
-<script src="js/admin.js"></script>
+<script src="js/admin.js?v=20260815"></script>
 </body>
 </html>
